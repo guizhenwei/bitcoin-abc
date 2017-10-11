@@ -19,8 +19,6 @@
 #include "wallet/coincontrol.h"
 #include "wallet/wallet.h"
 
-#include <boost/assign/list_of.hpp> // for 'map_list_of()'
-
 #include <QApplication>
 #include <QCheckBox>
 #include <QCursor>
@@ -458,7 +456,7 @@ void CoinControlDialog::updateLabels(WalletModel *model, QDialog *dialog) {
         nPayAmount += amount;
 
         if (amount > 0) {
-            CTxOut txout(amount, (CScript)std::vector<unsigned char>(24, 0));
+            CTxOut txout(amount, (CScript)std::vector<uint8_t>(24, 0));
             txDummy.vout.push_back(txout);
             if (txout.IsDust(dustRelayFee)) fDust = true;
         }
@@ -561,8 +559,7 @@ void CoinControlDialog::updateLabels(WalletModel *model, QDialog *dialog) {
             // Never create dust outputs; if we would, just add the dust to the
             // fee.
             if (nChange > 0 && nChange < MIN_CHANGE) {
-                CTxOut txout(nChange,
-                             (CScript)std::vector<unsigned char>(24, 0));
+                CTxOut txout(nChange, (CScript)std::vector<uint8_t>(24, 0));
                 if (txout.IsDust(dustRelayFee)) {
                     // dust-change will be raised until no dust
                     if (CoinControlDialog::fSubtractFeeFromAmount) {
@@ -744,14 +741,13 @@ void CoinControlDialog::updateView() {
             QString sAddress = "";
             if (ExtractDestination(out.tx->tx->vout[out.i].scriptPubKey,
                                    outputAddress)) {
-                sAddress = QString::fromStdString(
-                    CBitcoinAddress(outputAddress).ToString());
+                sAddress =
+                    QString::fromStdString(EncodeDestination(outputAddress));
 
                 // if listMode or change => show bitcoin address. In tree mode,
                 // address is not shown again for direct wallet address outputs
-                if (!treeMode || (!(sAddress == sWalletAddress))) {
+                if (!treeMode || (!(sAddress == sWalletAddress)))
                     itemOutput->setText(COLUMN_ADDRESS, sAddress);
-                }
             }
 
             // label

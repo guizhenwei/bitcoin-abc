@@ -60,9 +60,9 @@ static const bool DEFAULT_WHITELISTFORCERELAY = true;
 /** Default for -minrelaytxfee, minimum relay fee for transactions */
 static const unsigned int DEFAULT_MIN_RELAY_TX_FEE = 1000;
 //! -maxtxfee default
-static const CAmount DEFAULT_TRANSACTION_MAXFEE = 0.1 * COIN;
+static const CAmount DEFAULT_TRANSACTION_MAXFEE = 0.1 * COIN.GetSatoshis();
 //! Discourage users to set fees higher than this amount (in satoshis) per kB
-static const CAmount HIGH_TX_FEE_PER_KB = 0.01 * COIN;
+static const CAmount HIGH_TX_FEE_PER_KB = 0.01 * COIN.GetSatoshis();
 /** -maxtxfee will warn if called with a higher fee than this amount (in
  * satoshis */
 static const CAmount HIGH_MAX_TX_FEE = 100 * HIGH_TX_FEE_PER_KB;
@@ -429,13 +429,19 @@ uint64_t GetTransactionSigOpCount(const CTransaction &tx,
 
 /**
  * Check whether all inputs of this transaction are valid (no double spends,
- * scripts & sigs, amounts). This does not modify the UTXO set. If pvChecks is
- * not nullptr, script checks are pushed onto it instead of being performed
- * inline.
+ * scripts & sigs, amounts). This does not modify the UTXO set.
+ *
+ * If pvChecks is not nullptr, script checks are pushed onto it instead of being
+ * performed inline. Any script checks which are not necessary (eg due to script
+ * execution cache hits) are, obviously, not pushed onto pvChecks/run.
+ *
+ * Setting sigCacheStore/scriptCacheStore to false will remove elements from the
+ * corresponding cache which are matched. This is useful for checking blocks
+ * where we will likely never need the cache entry again.
  */
 bool CheckInputs(const CTransaction &tx, CValidationState &state,
                  const CCoinsViewCache &view, bool fScriptChecks,
-                 unsigned int flags, bool cacheStore,
+                 uint32_t flags, bool sigCacheStore, bool scriptCacheStore,
                  const PrecomputedTransactionData &txdata,
                  std::vector<CScriptCheck> *pvChecks = nullptr);
 
@@ -566,8 +572,7 @@ bool CheckBlock(const Config &Config, const CBlock &block,
 bool ContextualCheckTransaction(const Config &config, const CTransaction &tx,
                                 CValidationState &state,
                                 const Consensus::Params &consensusParams,
-                                int nHeight, int64_t nLockTimeCutoff,
-                                int64_t nMedianTimePast);
+                                int nHeight, int64_t nLockTimeCutoff);
 
 /**
  * This is a variant of ContextualCheckTransaction which computes the contextual

@@ -15,6 +15,7 @@
 #include "init.h"
 #include "miner.h"
 #include "net.h"
+#include "policy/policy.h"
 #include "pow.h"
 #include "rpc/server.h"
 #include "txmempool.h"
@@ -25,9 +26,6 @@
 
 #include <cstdint>
 #include <memory>
-
-#include <boost/assign/list_of.hpp>
-#include <boost/shared_ptr.hpp>
 
 #include <univalue.h>
 
@@ -111,7 +109,7 @@ static UniValue getnetworkhashps(const Config &config,
 }
 
 static UniValue generateBlocks(const Config &config,
-                               boost::shared_ptr<CReserveScript> coinbaseScript,
+                               std::shared_ptr<CReserveScript> coinbaseScript,
                                int nGenerate, uint64_t nMaxTries,
                                bool keepScript) {
     static const int nInnerLoopCount = 0x100000;
@@ -197,7 +195,7 @@ static UniValue generate(const Config &config, const JSONRPCRequest &request) {
         nMaxTries = request.params[1].get_int();
     }
 
-    boost::shared_ptr<CReserveScript> coinbaseScript;
+    std::shared_ptr<CReserveScript> coinbaseScript;
     GetMainSignals().ScriptForMining(coinbaseScript);
 
     // If the keypool is exhausted, no script is returned at all. Catch this.
@@ -245,14 +243,14 @@ static UniValue generatetoaddress(const Config &config,
         nMaxTries = request.params[2].get_int();
     }
 
-    CBitcoinAddress address(request.params[1].get_str());
-    if (!address.IsValid()) {
+    CTxDestination destination = DecodeDestination(request.params[1].get_str());
+    if (!IsValidDestination(destination)) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY,
                            "Error: Invalid address");
     }
 
-    boost::shared_ptr<CReserveScript> coinbaseScript(new CReserveScript());
-    coinbaseScript->reserveScript = GetScriptForDestination(address.Get());
+    std::shared_ptr<CReserveScript> coinbaseScript(new CReserveScript());
+    coinbaseScript->reserveScript = GetScriptForDestination(destination);
 
     return generateBlocks(config, coinbaseScript, nGenerate, nMaxTries, false);
 }
@@ -289,6 +287,9 @@ static UniValue getmininginfo(const Config &config,
     obj.push_back(Pair("currentblocksize", uint64_t(nLastBlockSize)));
     obj.push_back(Pair("currentblocktx", uint64_t(nLastBlockTx)));
     obj.push_back(Pair("difficulty", double(GetDifficulty())));
+    obj.push_back(Pair("blockprioritypercentage",
+                       uint8_t(GetArg("-blockprioritypercentage",
+                                      DEFAULT_BLOCK_PRIORITY_PERCENTAGE))));
     obj.push_back(Pair("errors", GetWarnings("statusbar")));
     obj.push_back(Pair("networkhashps", getnetworkhashps(config, request)));
     obj.push_back(Pair("pooledtx", uint64_t(mempool.size())));
@@ -740,6 +741,7 @@ static UniValue getblocktemplate(const Config &config,
             case THRESHOLD_LOCKED_IN:
                 // Ensure bit is set in block version
                 pblock->nVersion |= VersionBitsMask(consensusParams, pos);
+
             // FALLTHROUGH to get vbavailable set...
             case THRESHOLD_STARTED: {
                 const struct BIP9DeploymentInfo &vbinfo =
@@ -936,7 +938,7 @@ static UniValue estimatefee(const Config &config,
             HelpExampleCli("estimatefee", "6"));
     }
 
-    RPCTypeCheck(request.params, boost::assign::list_of(UniValue::VNUM));
+    RPCTypeCheck(request.params, {UniValue::VNUM});
 
     int nBlocks = request.params[0].get_int();
     if (nBlocks < 1) {
@@ -971,7 +973,7 @@ static UniValue estimatepriority(const Config &config,
             HelpExampleCli("estimatepriority", "6"));
     }
 
-    RPCTypeCheck(request.params, boost::assign::list_of(UniValue::VNUM));
+    RPCTypeCheck(request.params, {UniValue::VNUM});
 
     int nBlocks = request.params[0].get_int();
     if (nBlocks < 1) {
@@ -1011,7 +1013,7 @@ static UniValue estimatesmartfee(const Config &config,
             HelpExampleCli("estimatesmartfee", "6"));
     }
 
-    RPCTypeCheck(request.params, boost::assign::list_of(UniValue::VNUM));
+    RPCTypeCheck(request.params, {UniValue::VNUM});
 
     int nBlocks = request.params[0].get_int();
 
@@ -1055,7 +1057,7 @@ static UniValue estimatesmartpriority(const Config &config,
             HelpExampleCli("estimatesmartpriority", "6"));
     }
 
-    RPCTypeCheck(request.params, boost::assign::list_of(UniValue::VNUM));
+    RPCTypeCheck(request.params, {UniValue::VNUM});
 
     int nBlocks = request.params[0].get_int();
 

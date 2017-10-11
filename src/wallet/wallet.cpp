@@ -212,9 +212,8 @@ bool CWallet::AddKeyPubKey(const CKey &secret, const CPubKey &pubkey) {
         .WriteKey(pubkey, secret.GetPrivKey(), mapKeyMetadata[pubkey.GetID()]);
 }
 
-bool CWallet::AddCryptedKey(
-    const CPubKey &vchPubKey,
-    const std::vector<unsigned char> &vchCryptedSecret) {
+bool CWallet::AddCryptedKey(const CPubKey &vchPubKey,
+                            const std::vector<uint8_t> &vchCryptedSecret) {
     if (!CCryptoKeyStore::AddCryptedKey(vchPubKey, vchCryptedSecret)) {
         return false;
     }
@@ -243,9 +242,8 @@ bool CWallet::LoadKeyMetadata(const CTxDestination &keyID,
     return true;
 }
 
-bool CWallet::LoadCryptedKey(
-    const CPubKey &vchPubKey,
-    const std::vector<unsigned char> &vchCryptedSecret) {
+bool CWallet::LoadCryptedKey(const CPubKey &vchPubKey,
+                             const std::vector<uint8_t> &vchCryptedSecret) {
     return CCryptoKeyStore::AddCryptedKey(vchPubKey, vchCryptedSecret);
 }
 
@@ -280,8 +278,7 @@ bool CWallet::LoadCScript(const CScript &redeemScript) {
      * not add them to the wallet and warn.
      */
     if (redeemScript.size() > MAX_SCRIPT_ELEMENT_SIZE) {
-        std::string strAddr =
-            CBitcoinAddress(CScriptID(redeemScript)).ToString();
+        std::string strAddr = EncodeDestination(CScriptID(redeemScript));
         LogPrintf("%s: Warning: This wallet contains a redeemScript of size %i "
                   "which exceeds maximum size %i thus can never be redeemed. "
                   "Do not use address %s.\n",
@@ -2322,7 +2319,7 @@ static void ApproximateBestSubset(
                 // degenerate behavior and it is important that the rng is fast.
                 // We do not use a constant random sequence, because there may
                 // be some privacy improvement by making the selection random.
-                if (nPass == 0 ? insecure_rand.rand32() & 1 : !vfIncluded[i]) {
+                if (nPass == 0 ? insecure_rand.randbool() : !vfIncluded[i]) {
                     nTotal += vValue[i].first;
                     vfIncluded[i] = true;
                     if (nTotal >= nTargetValue) {
@@ -2598,7 +2595,7 @@ bool CWallet::FundTransaction(CMutableTransaction &tx, CAmount &nFeeRet,
 
     // Copy output sizes from new transaction; they may have had the fee
     // subtracted from them.
-    for (unsigned int idx = 0; idx < tx.vout.size(); idx++) {
+    for (size_t idx = 0; idx < tx.vout.size(); idx++) {
         tx.vout[idx].nValue = wtx.tx->vout[idx].nValue;
     }
 
@@ -2965,14 +2962,7 @@ bool CWallet::CreateTransaction(const std::vector<CRecipient> &vecSend,
         }
 
         if (sign) {
-            uint32_t nHashType = SIGHASH_ALL;
-            // If we already forked, use replay protected tx by default.
-            // It is ok to use GetConfig here, because we'll just use replay
-            // protected transaction only fairly soon anyway, so we can just
-            // remove that call.
-            if (IsUAHFenabledForCurrentBlock(GetConfig())) {
-                nHashType |= SIGHASH_FORKID;
-            }
+            uint32_t nHashType = SIGHASH_ALL | SIGHASH_FORKID;
 
             CTransaction txNewConst(txNew);
             int nIn = 0;
@@ -3245,12 +3235,12 @@ bool CWallet::SetAddressBook(const CTxDestination &address,
 
     if (!strPurpose.empty() &&
         !CWalletDB(strWalletFile)
-             .WritePurpose(CBitcoinAddress(address).ToString(), strPurpose)) {
+             .WritePurpose(EncodeDestination(address), strPurpose)) {
         return false;
     }
 
     return CWalletDB(strWalletFile)
-        .WriteName(CBitcoinAddress(address).ToString(), strName);
+        .WriteName(EncodeDestination(address), strName);
 }
 
 bool CWallet::DelAddressBook(const CTxDestination &address) {
@@ -3260,7 +3250,7 @@ bool CWallet::DelAddressBook(const CTxDestination &address) {
 
         if (fFileBacked) {
             // Delete destdata tuples associated with address.
-            std::string strAddress = CBitcoinAddress(address).ToString();
+            std::string strAddress = EncodeDestination(address);
             for (const std::pair<std::string, std::string> &item :
                  mapAddressBook[address].destdata) {
                 CWalletDB(strWalletFile).EraseDestData(strAddress, item.first);
@@ -3277,9 +3267,8 @@ bool CWallet::DelAddressBook(const CTxDestination &address) {
         return false;
     }
 
-    CWalletDB(strWalletFile).ErasePurpose(CBitcoinAddress(address).ToString());
-    return CWalletDB(strWalletFile)
-        .EraseName(CBitcoinAddress(address).ToString());
+    CWalletDB(strWalletFile).ErasePurpose(EncodeDestination(address));
+    return CWalletDB(strWalletFile).EraseName(EncodeDestination(address));
 }
 
 bool CWallet::SetDefaultKey(const CPubKey &vchPubKey) {
@@ -3712,8 +3701,8 @@ void CWallet::UpdatedTransaction(const uint256 &hashTx) {
     }
 }
 
-void CWallet::GetScriptForMining(boost::shared_ptr<CReserveScript> &script) {
-    boost::shared_ptr<CReserveKey> rKey(new CReserveKey(this));
+void CWallet::GetScriptForMining(std::shared_ptr<CReserveScript> &script) {
+    std::shared_ptr<CReserveKey> rKey(new CReserveKey(this));
     CPubKey pubkey;
     if (!rKey->GetReservedKey(pubkey)) {
         return;
@@ -3879,7 +3868,7 @@ bool CWallet::AddDestData(const CTxDestination &dest, const std::string &key,
     }
 
     return CWalletDB(strWalletFile)
-        .WriteDestData(CBitcoinAddress(dest).ToString(), key, value);
+        .WriteDestData(EncodeDestination(dest), key, value);
 }
 
 bool CWallet::EraseDestData(const CTxDestination &dest,
@@ -3892,8 +3881,7 @@ bool CWallet::EraseDestData(const CTxDestination &dest,
         return true;
     }
 
-    return CWalletDB(strWalletFile)
-        .EraseDestData(CBitcoinAddress(dest).ToString(), key);
+    return CWalletDB(strWalletFile).EraseDestData(EncodeDestination(dest), key);
 }
 
 bool CWallet::LoadDestData(const CTxDestination &dest, const std::string &key,
@@ -4408,6 +4396,14 @@ bool CWallet::BackupWallet(const std::string &strDest) {
                 }
 
                 try {
+
+                    if (boost::filesystem::equivalent(pathSrc, pathDest)) {
+                        LogPrintf("cannot backup to wallet source file %s\n",
+                                  pathDest.string());
+                        return false;
+
+                    }
+
 #if BOOST_VERSION >= 104000
                     boost::filesystem::copy_file(
                         pathSrc, pathDest,
